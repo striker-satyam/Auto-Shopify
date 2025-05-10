@@ -47,6 +47,7 @@ SITE_TXT_FILE = 'site.txt'
 subscribers = []
 user_sites = {}
 want_3ds = None
+stop_flag = False
 
 # Helper function to format price as $X.XX
 def format_price(price):
@@ -342,6 +343,7 @@ def save_approved_cc(fullcc, bin_info, reason):
 
 @bot.message_handler(content_types=["document"])
 def main(message):
+    global stop_flag
     if str(message.chat.id) not in subscribers:
         bot.reply_to(message, "Only for authorized users 🙄💗")
         return
@@ -353,6 +355,7 @@ def main(message):
     
     global want_3ds
     want_3ds = None
+    stop_flag = False  # Reset stop flag for new file processing
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     yes_button = types.InlineKeyboardButton("Yes ✅", callback_data=f"3ds_yes_{message.message_id}")
@@ -373,7 +376,7 @@ def main(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("3ds_"))
 def handle_3ds_choice(call):
-    global want_3ds
+    global want_3ds, stop_flag
     message_id = int(call.data.split("_")[-1])
     
     if call.data.startswith("3ds_yes"):
@@ -417,11 +420,9 @@ def handle_3ds_choice(call):
                 if not cc:
                     continue
                 
-                if any(filename.endswith(".stop") for filename in os.listdir('.')):
+                if stop_flag:
                     bot.edit_message_text(chat_id=call.message.chat.id, message_id=ko,
                                        text='𝗦𝗧𝗢𝗣𝗣𝗘𝗗 ✅\n𝗕𝗢𝗧 𝗕𝗬 ➜ @CODExHYPER')
-                    if os.path.exists('stop.stop'):
-                        os.remove('stop.stop')
                     return
                 
                 try:
@@ -472,11 +473,11 @@ def handle_3ds_choice(call):
                 
                 mes = types.InlineKeyboardMarkup(row_width=1)
                 cm1 = types.InlineKeyboardButton(f"• {fullcc} •", callback_data='u8')
-                status_btn = types.InlineKeyboardButton(f"• 𝗦𝗧𝗔𝗧𝗨𝗦 ➜ {reason_only} •", callback_data='u8')
-                cm3 = types.InlineKeyboardButton(f"• 𝗔𝗣𝗣𝗥𝗢𝗩𝗘𝗗 ✅ ➜ [ {live} ] •", callback_data='x')
-                cm4 = types.InlineKeyboardButton(f"• 𝗗𝗘�_C𝗟𝗜𝗡𝗘𝗗 ❌ ➜ [ {dd} ] •", callback_data='x')
-                cm5 = types.InlineKeyboardButton(f"• 𝗧𝗢𝗧𝗔𝗟 👻 ➜ [ {total} ] •", callback_data='x')
-                stop = types.InlineKeyboardButton(f"[ 𝐒𝐓𝐎𝐏 ]", callback_data='stop')
+                status_btn = types.InlineKeyboardButton(f"• STATUS ➜ {reason_only} •", callback_data='u8')
+                cm3 = types.InlineKeyboardButton(f"• APPROVED ✅ ➜ [ {live} ] •", callback_data='x')
+                cm4 = types.InlineKeyboardButton(f"• DECLINED ❌ ➜ [ {dd} ] •", callback_data='x')
+                cm5 = types.InlineKeyboardButton(f"• TOTAL 👻 ➜ [ {total} ] •", callback_data='x')
+                stop = types.InlineKeyboardButton(f"[ STOP ]", callback_data='stop')
                 mes.add(cm1, status_btn, cm3, cm4, cm5, stop)
                 bot.edit_message_text(chat_id=call.message.chat.id, message_id=ko,
                                    text='''Wait for processing 
@@ -505,13 +506,18 @@ def handle_3ds_choice(call):
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
+        if os.path.exists('stop.stop'):
+            os.remove('stop.stop')
         want_3ds = None
+        stop_flag = False
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=ko,
                            text='𝗕𝗘𝗘𝗡 𝗖𝗢𝗠𝗣𝗟𝗘𝗧𝗘𝗗 ✅\n𝗕𝗢𝗧 𝗕𝗬 ➜ @CODExHYPER')
 
 @bot.callback_query_handler(func=lambda call: call.data == 'stop')
 def menu_callback(call):
+    global stop_flag
     try:
+        stop_flag = True
         with open("stop.stop", "w") as file:
             pass
         bot.edit_message_text(
@@ -519,11 +525,9 @@ def menu_callback(call):
             message_id=call.message.message_id,
             text='𝗦𝗧𝗢𝗣𝗣𝗘𝗗 ✅\n𝗕𝗢𝗧 𝗕𝗬 ➜ @CODExHYPER'
         )
+        logger.info("Stop button pressed, processing halted")
     except Exception as e:
-        logger.error(f"Error creating stop file: {e}")
-    finally:
-        if os.path.exists("stop.stop"):
-            os.remove("stop.stop")
+        logger.error(f"Error handling stop callback: {e}")
 
 # Start polling with error handling
 def start_polling():
